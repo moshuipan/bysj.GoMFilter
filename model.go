@@ -1,4 +1,4 @@
-package bysj
+package main
 
 import (
 	"time"

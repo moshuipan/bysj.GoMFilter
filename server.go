@@ -1,8 +1,9 @@
-package bysj
+package main
 
 import (
 	"go-smtpd/smtpd"
 	"log"
+	"os"
 	"time"
 
 	"github.com/astaxie/beego/orm"
@@ -24,7 +25,7 @@ func (e *env) AddRecipient(rcpt smtpd.MailAddress) error {
 }
 
 func (e *env) BeginData() error {
-	if len(rcpts) == 0 {
+	if len(e.rcpts) == 0 {
 		return smtpd.SMTPError("554 5.5.1 Error: no valid recipients")
 	}
 	return nil
@@ -35,14 +36,14 @@ func (e *env) Write(line []byte) error {
 }
 func (e *env) Close() error {
 	var emailOb EmailObject
-	if !Filter() {
+	o := orm.NewOrm()
+	if !Filter(e.data, o) {
 		return smtpd.SMTPError("554 Error: rejecting Spam Mail!")
 	}
 	//暂时只保存邮件
-	o := orm.NewOrm()
 	for _, v := range e.rcpts {
 		emailOb = EmailObject{
-			From: e.from,
+			From: e.from.Email(),
 			Rcpt: v.Email(),
 			Data: e.data,
 			Ham:  true,
@@ -74,7 +75,12 @@ func OnNewConnection(c smtpd.Connection) error {
 }
 func init() {
 	orm.RegisterDriver("mysql", orm.DRMySQL)
-	orm.RegisterDataBase("default", "mysql", "root:root@123456/emailserver?charset=utf8")
+	orm.RegisterDataBase("default", "mysql", "root:123456@/emailserver?charset=utf8")
+	err := orm.RunSyncdb("default", true, true)
+	if err != nil {
+		log.Fatalf("create dbtable error:%v", err)
+		os.Exit(0)
+	}
 }
 func main() {
 	s := &smtpd.Server{
