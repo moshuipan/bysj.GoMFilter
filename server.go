@@ -35,14 +35,14 @@ func (e *env) Write(line []byte) error {
 	return nil
 }
 func (e *env) Close() error {
-	var emailOb EmailObject
+	var emailOb *EmailObject
 	o := orm.NewOrm()
-	if !Filter(e.data, o) {
+	if !Filter(e.data) {
 		return smtpd.SMTPError("554 Error: rejecting Spam Mail!")
 	}
 	//暂时只保存邮件
 	for _, v := range e.rcpts {
-		emailOb = EmailObject{
+		emailOb = &EmailObject{
 			From: e.from.Email(),
 			Rcpt: v.Email(),
 			Data: e.data,
@@ -83,11 +83,13 @@ func init() {
 	}
 }
 func main() {
+	InitTrain()
 	s := &smtpd.Server{
-		Addr:            ":2500",
+		Addr:            ":8000",
 		OnNewMail:       onNewMail,
 		OnNewConnection: OnNewConnection,
 	}
+	log.Println("====listen=====")
 	err := s.ListenAndServe()
 	if err != nil {
 		log.Fatalf("ListenAndServe: %v", err)

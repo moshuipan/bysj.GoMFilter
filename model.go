@@ -15,7 +15,26 @@ type EmailObject struct {
 	Date time.Time `orm:"auto_now_add"`
 	Ham  bool      `orm:"default(true)"`
 }
+type TrainSpamResult struct {
+	Id         int `orm:"pk;auto"`
+	Key        string
+	Pro        float64
+	LastUptate time.Time `orm:"auto_now"`
+}
+type TrainHamResult struct {
+	Id         int `orm:"pk;auto"`
+	Key        string
+	Pro        float64
+	LastUptate time.Time `orm:"auto_now"`
+}
+type AllPro struct {
+	Id         int `orm:"pk;auto"`
+	Key        string
+	Pros       float64
+	Proh       float64
+	LastUptate time.Time `orm:"auto_now"`
+}
 
 func init() {
-	orm.RegisterModel(new(EmailObject))
+	orm.RegisterModel(new(EmailObject), new(TrainHamResult), new(TrainSpamResult), new(AllPro))
 }
