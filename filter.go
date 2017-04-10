@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"math"
 	//	"math"
 	"strconv"
 	//	"fmt"
@@ -16,27 +17,55 @@ import (
 )
 
 type wordMap map[string]bool
+type AllMap struct {
+	Key   string
+	SpamN int
+	HamN  int
+}
 
 var (
-	re  *regexp.Regexp
-	all = make(map[string]*AllPro)
+	re       *regexp.Regexp
+	all      = make(map[string]*AllPro)
+	spamNums = 0
+	hamNums  = 0
+	//	allNums  = make(map[string]int)
+	//	spamMap = make(map[string]int)
+	//	hamMap  = make(map[string]int)
+	allmap = make(map[string]*AllMap)
 )
 
 const (
-	Spamdir = "E:\\mygo\\src\\bysj.GoMFilter\\train\\spam"
-	Hamdir  = "E:\\mygo\\src\\bysj.GoMFilter\\train\\ham"
+	Spamdir = "D:\\goAPP\\src\\bysj.GoMFilter\\train\\spam"
+	Hamdir  = "D:\\goAPP\\src\\bysj.GoMFilter\\train\\ham"
 )
 
 func init() {
 	pattern := `([a-zA-Z]+['’][a-zA-Z]\b)|\$?\d+(\.\d+)?%?|(\b[A-Za-z]\.)+[A-Za-z]\b|\w+(-\w+)*`
 	re = regexp.MustCompile(pattern)
+	spamMap, nums := CountWordMap(Spamdir)
+	spamNums = nums
+	hamMap, nums := CountWordMap(Hamdir)
+	hamNums = nums
+	for k, v := range spamMap {
+		if n, ok := hamMap[k]; ok {
+			allmap[k] = &AllMap{Key: k, SpamN: v, HamN: n}
+		} else {
+			allmap[k] = &AllMap{Key: k, SpamN: v, HamN: 0}
+		}
+	}
+	for k, v := range hamMap {
+		if _, ok := spamMap[k]; !ok {
+			allmap[k] = &AllMap{Key: k, SpamN: 0, HamN: v}
+		}
+	}
+	log.Println("=====end allmap====")
 }
 
 //训练好的过滤器对外接口
 func Filter(data string) bool {
 	wordmap := genWordMap(data)
 	//=======================
-	ps, ph := 0.5, 0.5
+	ps, ph := float64(spamNums)/float64(spamNums+hamNums), float64(hamNums)/float64(spamNums+hamNums)
 	var pwis float64 = 0.0
 	var pwih float64 = 0.0
 	for k, _ := range wordmap {
@@ -47,6 +76,10 @@ func Filter(data string) bool {
 			} else {
 				pwis *= pro.Pros
 			}
+		} else {
+			//			if pwis==0{
+			//				pwis=
+			//			}
 		}
 	}
 	for k, _ := range wordmap {
@@ -63,6 +96,32 @@ func Filter(data string) bool {
 	proh := (ph * pwih) / (ps*pwis + ph*pwih)
 	log.Println("pros:", pros, "\tproh:", proh)
 	return (pros / proh) < 1.2
+}
+func Filter2(data string) bool {
+	wordmap := genWordMap(data)
+	var prosapm float64 = 0.0
+	var proham float64 = 0.0
+	for k, _ := range allmap {
+		if _, ok := wordmap[k]; ok {
+			prosapm += math.Log(float64(allmap[k].SpamN + 1))
+		} else {
+			prosapm += math.Log(float64(spamNums - allmap[k].SpamN - 1))
+		}
+	}
+	prosapm -= math.Log(float64(spamNums+2)) * float64(len(allmap))
+	prosapm += math.Log(float64(spamNums))
+	prosapm -= math.Log(float64(spamNums + hamNums))
+	for k, _ := range allmap {
+		if _, ok := wordmap[k]; ok {
+			proham += math.Log(float64(allmap[k].HamN + 1))
+		} else {
+			proham += math.Log(float64(hamNums - allmap[k].HamN - 1))
+		}
+	}
+	proham -= math.Log(float64(hamNums+2)) * float64(len(allmap))
+	proham += math.Log(float64(hamNums))
+	proham -= math.Log(float64(spamNums + hamNums))
+	return prosapm < 1*proham
 }
 
 //生成词干map
@@ -134,7 +193,7 @@ func CountWordMap(dir string) (map[string]int, int) {
 			spamd = ""
 		}
 	}
-	//	隐藏单词频率超过fn，?小于=1的
+	//	隐藏单词频率超过fn or 10000，?小于=1的
 	logf, err := os.OpenFile("trainlog.txt", os.O_WRONLY|os.O_APPEND, 0666)
 	if os.IsNotExist(err) {
 		logf, err = os.Create("trainlog.txt")
@@ -167,6 +226,7 @@ func InitTrain() {
 	prospam := make(map[string]float64)
 	proham := make(map[string]float64)
 	swordmap, nums := CountWordMap(Spamdir)
+	spamNums += nums
 	log.Println("====swordmap length:", len(swordmap), "======")
 	for k, v := range swordmap {
 		prospam[k] = float64(v) / float64(nums)
@@ -178,6 +238,7 @@ func InitTrain() {
 		}
 	}()
 	hwordmap, nums := CountWordMap(Hamdir)
+	hamNums += nums
 	log.Println("====hwordmap length:", len(hwordmap), "======")
 	for k, v := range hwordmap {
 		proham[k] = float64(v) / float64(nums)

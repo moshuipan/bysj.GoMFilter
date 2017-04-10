@@ -37,7 +37,7 @@ func (e *env) Write(line []byte) error {
 func (e *env) Close() error {
 	var emailOb *EmailObject
 	o := orm.NewOrm()
-	if !Filter(e.data) {
+	if !Filter2(e.data) {
 		return smtpd.SMTPError("554 Error: rejecting Spam Mail!")
 	}
 	//暂时只保存邮件
@@ -83,7 +83,7 @@ func init() {
 	}
 }
 func main() {
-	InitTrain()
+	//	InitTrain()
 	s := &smtpd.Server{
 		Addr:            ":8000",
 		OnNewMail:       onNewMail,
