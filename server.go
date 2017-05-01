@@ -3,10 +3,15 @@ package main
 import (
 	"go-smtpd/smtpd"
 	"log"
-	"os"
 	"time"
 
 	"github.com/astaxie/beego/orm"
+)
+
+const (
+	DEBUG      = true
+	DEBUG_MODE = true
+	TEST       = true
 )
 
 var server smtpd.Server
@@ -38,6 +43,24 @@ func (e *env) Close() error {
 	var emailOb *EmailObject
 	o := orm.NewOrm()
 	if !Filter2(e.data) {
+		for _, v := range e.rcpts {
+			if DEBUG && !times {
+				if DEBUG_MODE {
+					DeCrease(e.data)
+				}
+				return smtpd.SMTPError("554 Error: DEBUG MODE!")
+			}
+			emailOb = &EmailObject{
+				From: e.from.Email(),
+				Rcpt: v.Email(),
+				Data: e.data,
+				Ham:  false,
+			}
+			_, err := o.Insert(emailOb)
+			if err != nil {
+				log.Printf("%s---insert error:err=%V,--from %s to %s\n", time.Now().Format("2006-01-02 15:04:05"), err, emailOb.From, emailOb.Rcpt)
+			}
+		}
 		return smtpd.SMTPError("554 Error: rejecting Spam Mail!")
 	}
 	//暂时只保存邮件
@@ -73,15 +96,7 @@ func onNewMail(c smtpd.Connection, from smtpd.MailAddress) (smtpd.Envelope, erro
 func OnNewConnection(c smtpd.Connection) error {
 	return nil
 }
-func init() {
-	orm.RegisterDriver("mysql", orm.DRMySQL)
-	orm.RegisterDataBase("default", "mysql", "root:123456@/emailserver?charset=utf8")
-	err := orm.RunSyncdb("default", true, true)
-	if err != nil {
-		log.Fatalf("create dbtable error:%v", err)
-		os.Exit(0)
-	}
-}
+
 func main() {
 	//	InitTrain()
 	s := &smtpd.Server{

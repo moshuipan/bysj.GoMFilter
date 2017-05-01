@@ -14,14 +14,10 @@ import (
 
 	"github.com/agonopol/go-stem"
 	"github.com/astaxie/beego/orm"
+	_ "github.com/go-sql-driver/mysql"
 )
 
 type wordMap map[string]bool
-type AllMap struct {
-	Key   string
-	SpamN int
-	HamN  int
-}
 
 var (
 	re       *regexp.Regexp
@@ -35,33 +31,71 @@ var (
 )
 
 const (
-	Spamdir = "D:\\goAPP\\src\\bysj.GoMFilter\\train\\spam"
-	Hamdir  = "D:\\goAPP\\src\\bysj.GoMFilter\\train\\ham"
+	Spamdir = "E:\\mygo\\src\\bysj.GoMFilter\\train\\spam"
+	Hamdir  = "E:\\mygo\\src\\bysj.GoMFilter\\train\\ham"
 )
 
 func init() {
+	orm.RegisterDriver("mysql", orm.DRMySQL)
+	orm.RegisterDataBase("default", "mysql", "root:123456@/emailserver?charset=utf8")
+	orm.RegisterModel(new(EmailObject), new(TrainHamResult), new(TrainSpamResult), new(AllPro), new(AllMap))
+	//	err := orm.RunSyncdb("default", true, true)
+	//	if err != nil {
+	//		log.Fatalf("create dbtable error:%v", err)
+	//		os.Exit(0)
+	//	}
 	pattern := `([a-zA-Z]+['’][a-zA-Z]\b)|\$?\d+(\.\d+)?%?|(\b[A-Za-z]\.)+[A-Za-z]\b|\w+(-\w+)*`
 	re = regexp.MustCompile(pattern)
+	if TEST {
+		var as []*AllMap
+		o := orm.NewOrm()
+		n, err := o.Raw("select * from all_map").QueryRows(&as)
+		if err != nil {
+			log.Println("\033[31mget pro:", err)
+		}
+		log.Println("\033[33m=========get pro nums:", n)
+		var a *AllMap
+		for _, v := range as {
+			allmap[v.Key] = v
+			a = v
+		}
+		hamNums = a.HamEmails
+		spamNums = a.SpamEmails
+
+		log.Println("\033[33mHamEmails:", hamNums, ",SpamEmails:", spamNums)
+		log.Println("\033[33mGET ALL PRO!")
+		return
+	}
 	spamMap, nums := CountWordMap(Spamdir)
 	spamNums = nums
 	hamMap, nums := CountWordMap(Hamdir)
 	hamNums = nums
 	for k, v := range spamMap {
 		if n, ok := hamMap[k]; ok {
-			allmap[k] = &AllMap{Key: k, SpamN: v, HamN: n}
+			allmap[k] = &AllMap{Key: k, SpamN: v, HamN: n, SpamEmails: spamNums, HamEmails: hamNums}
 		} else {
-			allmap[k] = &AllMap{Key: k, SpamN: v, HamN: 0}
+			allmap[k] = &AllMap{Key: k, SpamN: v, HamN: 0, SpamEmails: spamNums, HamEmails: hamNums}
 		}
 	}
 	for k, v := range hamMap {
 		if _, ok := spamMap[k]; !ok {
-			allmap[k] = &AllMap{Key: k, SpamN: 0, HamN: v}
+			allmap[k] = &AllMap{Key: k, SpamN: 0, HamN: v, SpamEmails: spamNums, HamEmails: hamNums}
 		}
 	}
+	go func() {
+		//插入数据库
+		o := orm.NewOrm()
+		for _, v := range allmap {
+			_, err := o.Insert(v)
+			if err != nil {
+				log.Println("insert pro:", err)
+			}
+		}
+	}()
 	log.Println("=====end allmap====")
 }
 
-//训练好的过滤器对外接口
+//训练好的过滤器对外接口1,概率连乘
 func Filter(data string) bool {
 	wordmap := genWordMap(data)
 	//=======================
@@ -97,6 +131,8 @@ func Filter(data string) bool {
 	log.Println("pros:", pros, "\tproh:", proh)
 	return (pros / proh) < 1.2
 }
+
+//训练好的过滤器对外接口2,对数概率连加
 func Filter2(data string) bool {
 	wordmap := genWordMap(data)
 	var prosapm float64 = 0.0
@@ -121,7 +157,9 @@ func Filter2(data string) bool {
 	proham -= math.Log(float64(hamNums+2)) * float64(len(allmap))
 	proham += math.Log(float64(hamNums))
 	proham -= math.Log(float64(spamNums + hamNums))
-	return prosapm < 1*proham
+	log.Println("=====prospam:", prosapm, "=======")
+	log.Println("=====proham:", proham, "=======")
+	return prosapm < 1.2*proham
 }
 
 //生成词干map
@@ -219,6 +257,21 @@ func CountWordMap(dir string) (map[string]int, int) {
 	}
 	log.Println("file nums:", fn)
 	return temp, fn
+}
+
+//减小该邮件key概率集
+func DeCrease(data string) {
+	wordmap := genWordMap(data)
+	o := orm.NewOrm()
+	for k := range wordmap {
+		_, err := o.Raw("update all_map set spam_n=spam_n-1 where `key`=?", k).Exec()
+		if err != nil {
+			log.Println("decrase pro:", err)
+		}
+		if v, ok := allmap[k]; ok {
+			v.SpamN -= 1
+		}
+	}
 }
 
 func InitTrain() {

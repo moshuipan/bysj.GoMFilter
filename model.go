@@ -2,9 +2,6 @@ package main
 
 import (
 	"time"
-
-	"github.com/astaxie/beego/orm"
-	_ "github.com/go-sql-driver/mysql"
 )
 
 type EmailObject struct {
@@ -34,7 +31,11 @@ type AllPro struct {
 	Proh       float64
 	LastUptate time.Time `orm:"auto_now"`
 }
-
-func init() {
-	orm.RegisterModel(new(EmailObject), new(TrainHamResult), new(TrainSpamResult), new(AllPro))
+type AllMap struct {
+	Id         int `orm:"pk;auto"`
+	Key        string
+	SpamN      int
+	HamN       int
+	SpamEmails int
+	HamEmails  int
 }
